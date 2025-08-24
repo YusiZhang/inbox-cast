@@ -1,0 +1,4 @@
+- Look at the recent claude history and understand the context
+- Look at current staged or any uncommitted files and understand the code change
+- Draft a commit message 
+- Git add and commit 

@@ -1,0 +1,93 @@
+"""RSS source fetcher implementation."""
+import feedparser
+import requests
+from datetime import datetime
+from typing import List, Optional
+from ..types import RawItem, Source
+from ..config import FeedConfig
+
+
+class RSSSource(Source):
+    """Simple RSS source fetcher."""
+    
+    def __init__(self, feed_config: FeedConfig):
+        self.feed_config = feed_config
+    
+    def fetch(self) -> List[RawItem]:
+        """Fetch items from RSS feed."""
+        try:
+            # Parse RSS feed
+            feed = feedparser.parse(self.feed_config.url)
+            
+            if feed.bozo:
+                print(f"Warning: RSS feed may be malformed: {self.feed_config.url}")
+            
+            # Get source name from feed title (do this once outside the loop)
+            source_name = getattr(feed.feed, 'title', 'Unknown')
+            
+            items = []
+            for entry in feed.entries:
+                # Extract content (try multiple fields)
+                content = self._extract_content(entry)
+                
+                # Parse publish date
+                published = self._parse_date(entry)
+                
+                item = RawItem(
+                    title=entry.title,
+                    url=entry.link,
+                    content=content,
+                    published=published,
+                    source_name=source_name
+                )
+                items.append(item)
+                
+            print(f"Fetched {len(items)} items from {source_name}")
+            return items
+            
+        except Exception as e:
+            print(f"Error fetching RSS feed {self.feed_config.url}: {e}")
+            return []
+    
+    def _extract_content(self, entry) -> str:
+        """Extract content from RSS entry, trying multiple fields."""
+        # Try content first
+        if hasattr(entry, 'content') and entry.content:
+            return entry.content[0].value
+        
+        # Try summary
+        if hasattr(entry, 'summary'):
+            return entry.summary
+        
+        # Try description  
+        if hasattr(entry, 'description'):
+            return entry.description
+            
+        return ""
+    
+    def _parse_date(self, entry) -> Optional[datetime]:
+        """Parse publish date from entry."""
+        try:
+            if hasattr(entry, 'published_parsed') and entry.published_parsed:
+                return datetime(*entry.published_parsed[:6])
+        except:
+            pass
+        return None
+
+
+class MultiRSSSource(Source):
+    """Aggregates multiple RSS sources."""
+    
+    def __init__(self, feed_configs: List[FeedConfig]):
+        self.sources = [RSSSource(config) for config in feed_configs]
+    
+    def fetch(self) -> List[RawItem]:
+        """Fetch from all RSS sources."""
+        all_items = []
+        
+        for source in self.sources:
+            items = source.fetch()
+            all_items.extend(items)
+        
+        print(f"Total items fetched: {len(all_items)}")
+        return all_items
