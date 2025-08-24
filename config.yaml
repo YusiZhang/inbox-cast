@@ -1,9 +1,5 @@
 rss_feeds:
-  - url: "https://blog.openai.com/rss.xml"
-    weight: 1.0
   - url: "https://huggingface.co/blog/feed.xml" 
-    weight: 1.0
-  - url: "https://www.anthropic.com/news/rss.xml"
     weight: 1.0
 
 target_duration: 10  # minutes
@@ -11,7 +7,7 @@ dedupe_threshold: 0.9
 
 voice_settings:
   provider: "espeak"  # fallback for step 1
-  speed: 1.0
+  wpm: 60  # words per minute (comfortable listening speed)
   voice_id: "default"
 
 output:

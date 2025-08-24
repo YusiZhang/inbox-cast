@@ -14,7 +14,7 @@ class FeedConfig:
 @dataclass  
 class VoiceConfig:
     provider: str = "espeak"
-    speed: float = 1.0
+    wpm: int = 165
     voice_id: str = "default"
 
 

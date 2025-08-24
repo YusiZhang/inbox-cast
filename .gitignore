@@ -8,3 +8,11 @@ wheels/
 
 # Virtual environments
 .venv
+
+# IDE settings
+.idea/
+.vscode/
+
+# output files
+out/
+

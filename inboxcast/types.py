@@ -58,7 +58,7 @@ class TTSProvider(Protocol):
         self, 
         text: str, 
         voice: str = "default", 
-        speed: float = 1.0, 
+        wpm: int = 165, 
         sample_rate: int = 44100, 
         format: str = "wav"
     ) -> bytes:

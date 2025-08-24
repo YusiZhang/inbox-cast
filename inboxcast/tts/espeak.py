@@ -24,7 +24,7 @@ class EspeakProvider(BaseTTSProvider):
         self, 
         text: str, 
         voice: str = "default", 
-        speed: float = 1.0, 
+        wpm: int = 165, 
         sample_rate: int = 44100, 
         format: str = "wav"
     ) -> bytes:
@@ -35,8 +35,8 @@ class EspeakProvider(BaseTTSProvider):
             temp_path = temp_file.name
         
         try:
-            # Convert speed to espeak format (words per minute)
-            espeak_speed = int(165 * speed)  # 165 is base WPM
+            # Use WPM directly for espeak speed
+            espeak_speed = wpm
             
             # Build espeak command
             cmd = [
@@ -80,14 +80,14 @@ class DummyTTSProvider(BaseTTSProvider):
         self, 
         text: str, 
         voice: str = "default", 
-        speed: float = 1.0, 
+        wpm: int = 165, 
         sample_rate: int = 44100, 
         format: str = "wav"
     ) -> bytes:
         """Generate silence based on estimated duration."""
         
         # Estimate duration and generate silence
-        duration = self.estimate_duration(text, speed)
+        duration = self.estimate_duration(text, wpm)
         num_samples = int(duration * sample_rate)
         
         # WAV header for 16-bit mono

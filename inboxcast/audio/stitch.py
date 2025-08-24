@@ -114,15 +114,19 @@ class SimpleEpisodeBuilder:
         if not sorted_items:
             return []
         
-        words_per_item = min(100, self.target_words // len(sorted_items))
+        # Limit to reasonable number of items for the target duration
+        max_items_for_duration = min(len(sorted_items), self.target_minutes * 2)  # ~30 seconds per item
+        selected_items = sorted_items[:max_items_for_duration]
+        
+        words_per_item = self.target_words // len(selected_items)
         fitted_items = []
         total_words = 0
         
-        for item in sorted_items:
+        for item in selected_items:
             if total_words >= self.target_words:
                 break
                 
-            # Limit this item's word count
+            # Allocate more reasonable word count per item
             remaining_words = self.target_words - total_words
             allocated_words = min(words_per_item, remaining_words, len(item.script.split()))
             

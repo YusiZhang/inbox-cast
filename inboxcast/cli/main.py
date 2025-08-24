@@ -1,6 +1,7 @@
 """Main CLI interface for InboxCast."""
 import click
 from pathlib import Path
+from datetime import datetime
 from ..config import Config
 from ..sources.rss import MultiRSSSource
 from ..dedupe.simple import SimpleDeduplicator  
@@ -50,7 +51,7 @@ def run(config, output, minutes):
         
         # Step 3: Summarize
         click.echo("✍️  Summarizing content...")
-        summarizer = SimpleSummarizer(max_words=100)
+        summarizer = SimpleSummarizer(max_words=50)  # More reasonable for audio
         processed_items = []
         
         for item in unique_items:
@@ -92,7 +93,7 @@ def run(config, output, minutes):
                 audio_data = tts_provider.synthesize(
                     item.script,
                     voice=cfg.voice_settings.voice_id,
-                    speed=cfg.voice_settings.speed
+                    wpm=cfg.voice_settings.wpm
                 )
                 if audio_data:
                     audio_segments.append(audio_data)
@@ -171,7 +172,7 @@ def plan(config, minutes):
     deduplicator = SimpleDeduplicator()
     unique_items = deduplicator.deduplicate(raw_items)
     
-    summarizer = SimpleSummarizer()
+    summarizer = SimpleSummarizer(max_words=50)
     processed_items = [summarizer.summarize(item) for item in unique_items]
     
     # Plan episode
@@ -192,6 +193,18 @@ def plan(config, minutes):
     estimated_minutes = total_words / 165
     click.echo(f"📊 Total: {len(planned_items)} items, {total_words} words")
     click.echo(f"⏱️  Estimated duration: {estimated_minutes:.1f} minutes")
+    
+    # Save full script to file for inspection
+    script_path = Path("out") / "episode_script.txt"
+    script_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(script_path, 'w', encoding='utf-8') as f:
+        f.write(f"InboxCast Episode Script - {datetime.now().strftime('%Y-%m-%d')}\n")
+        f.write("=" * 60 + "\n\n")
+        for i, item in enumerate(planned_items, 1):
+            f.write(f"{i}. {item.title}\n")
+            f.write(f"   Words: {item.word_count}\n")
+            f.write(f"   Script: {item.script}\n\n")
+    click.echo(f"📝 Full script saved to: {script_path}")
 
 
 if __name__ == '__main__':
