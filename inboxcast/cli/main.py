@@ -114,7 +114,18 @@ def run(config, output, minutes):
         episode_path = output_path / cfg.output.episode_filename.replace('.mp3', '.wav')
         stitcher.export_wav(combined_audio, str(episode_path))
         
-        # Step 7: Generate RSS feed
+        # Step 7: Generate episode script
+        click.echo("📝 Generating episode script...")
+        script_path = output_path / "episode_script.txt"
+        with open(script_path, 'w', encoding='utf-8') as f:
+            f.write(f"InboxCast Episode Script - {datetime.now().strftime('%Y-%m-%d')}\n")
+            f.write("=" * 60 + "\n\n")
+            for i, item in enumerate(planned_items, 1):
+                f.write(f"{i}. {item.title}\n")
+                f.write(f"   Words: {item.word_count}\n")
+                f.write(f"   Script: {item.script}\n\n")
+        
+        # Step 8: Generate RSS feed
         click.echo("📻 Generating RSS feed...")
         rss_generator = RSSGenerator()
         rss_generator.write_files(str(output_path), cfg.output.episode_filename, planned_items)
@@ -128,6 +139,7 @@ def run(config, output, minutes):
         click.echo(f"   🎧 Episode: {episode_path}")
         click.echo(f"   📡 RSS feed: {output_path / 'feed.xml'}")
         click.echo(f"   📋 Metadata: {output_path / 'episode.json'}")
+        click.echo(f"   📝 Script: {script_path}")
         
     except Exception as e:
         click.echo(f"❌ Pipeline failed: {e}")

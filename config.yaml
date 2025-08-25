@@ -1,6 +1,10 @@
 rss_feeds:
-  - url: "https://huggingface.co/blog/feed.xml" 
+  - url: "https://www.technologyreview.com/feed/"
     weight: 1.0
+  # - url: "https://huggingface.co/blog/feed.xml" 
+  #   weight: 1.0
+  # - url: "https://hnrss.org/newest?points=300"
+  #   weight: 0.8
 
 target_duration: 10  # minutes
 dedupe_threshold: 0.9
