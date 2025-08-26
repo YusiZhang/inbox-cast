@@ -4,8 +4,10 @@ from pathlib import Path
 from datetime import datetime
 from ..config import Config
 from ..sources.rss import MultiRSSSource
-from ..dedupe.simple import SimpleDeduplicator  
+from ..dedupe.simple import SimpleDeduplicator
+from ..dedupe.semantic import SemanticDeduplicator  
 from ..summarize.engine import SimpleSummarizer
+from ..summarize.openai_engine import OpenAISummarizer
 from ..tts.espeak import EspeakProvider, DummyTTSProvider
 from ..audio.stitch import SimpleAudioStitcher, SimpleEpisodeBuilder
 from ..output.rss import RSSGenerator
@@ -46,24 +48,60 @@ def run(config, output, minutes):
         
         # Step 2: Deduplicate
         click.echo("🔄 Deduplicating content...")
-        deduplicator = SimpleDeduplicator()
+        if cfg.processing.deduplicator == "semantic":
+            cache_dir = output_path / "cache" 
+            deduplicator = SemanticDeduplicator(
+                model_name=cfg.processing.embedding_model,
+                similarity_threshold=cfg.processing.similarity_threshold,
+                cache_dir=str(cache_dir),
+                cache_days=cfg.processing.embedding_cache_days
+            )
+        else:
+            deduplicator = SimpleDeduplicator()
+        
         unique_items = deduplicator.deduplicate(raw_items)
         
         # Step 3: Summarize
         click.echo("✍️  Summarizing content...")
-        summarizer = SimpleSummarizer(max_words=50)  # More reasonable for audio
+        if cfg.processing.summarizer == "openai":
+            try:
+                summarizer = OpenAISummarizer(
+                    model=cfg.processing.openai_model,
+                    max_words=cfg.processing.max_words,
+                    max_quote_words=cfg.processing.max_quote_words,
+                    temperature=cfg.processing.openai_temperature,
+                    use_content_cleaning=cfg.processing.use_readability
+                )
+                click.echo(f"Using OpenAI summarizer ({cfg.processing.openai_model})")
+            except Exception as e:
+                click.echo(f"⚠️  OpenAI setup failed: {e}")
+                click.echo("Falling back to simple summarizer")
+                summarizer = SimpleSummarizer(max_words=cfg.processing.max_words)
+        else:
+            summarizer = SimpleSummarizer(max_words=cfg.processing.max_words)
+        
         processed_items = []
+        skipped_count = 0
         
         for item in unique_items:
             try:
                 processed = summarizer.summarize(item)
-                processed_items.append(processed)
+                # Skip items that were filtered out by policy guards
+                if processed.word_count > 0:  # Non-empty script means not skipped
+                    processed_items.append(processed)
+                else:
+                    skipped_count += 1
+                    click.echo(f"⚠️  Skipped '{item.title}': {processed.notes.get('skip_reason', 'unknown')}")
             except Exception as e:
                 click.echo(f"⚠️  Failed to summarize {item.title}: {e}")
+                skipped_count += 1
         
         if not processed_items:
             click.echo("❌ No items successfully processed")
             return
+        
+        if skipped_count > 0:
+            click.echo(f"📋 Processed {len(processed_items)} items, skipped {skipped_count}")
         
         # Step 4: Plan episode duration
         click.echo("⏱️  Planning episode duration...")
@@ -168,6 +206,31 @@ def fetch(config):
         click.echo()
 
 
+@cli.command()
+@click.option('--config', '-c', default='config.yaml', help='Configuration file') 
+def validate(config):
+    """Validate configuration file and show settings."""
+    try:
+        cfg = Config.load(config)
+        click.echo(f"✅ Configuration valid: {config}")
+        click.echo(f"   📡 RSS feeds: {len(cfg.rss_feeds)}")
+        click.echo(f"   🔄 Deduplicator: {cfg.processing.deduplicator}")
+        click.echo(f"   ✍️  Summarizer: {cfg.processing.summarizer}")
+        click.echo(f"   ⏱️  Target duration: {cfg.target_duration} minutes")
+        
+        # Check OpenAI setup if using OpenAI
+        if cfg.processing.summarizer == "openai":
+            import os
+            if not os.getenv("OPENAI_API_KEY"):
+                click.echo("⚠️  OPENAI_API_KEY not set in environment")
+            else:
+                click.echo("✅ OpenAI API key found")
+        
+    except Exception as e:
+        click.echo(f"❌ Configuration error: {e}")
+        return 1
+
+
 @cli.command() 
 @click.option('--config', '-c', default='config.yaml', help='Configuration file')
 @click.option('--minutes', '-m', type=int, help='Target duration in minutes')
@@ -181,11 +244,45 @@ def plan(config, minutes):
     source = MultiRSSSource(cfg.rss_feeds)
     raw_items = source.fetch()
     
-    deduplicator = SimpleDeduplicator()
+    # Use configured deduplicator
+    if cfg.processing.deduplicator == "semantic":
+        cache_dir = Path("out") / "cache"
+        deduplicator = SemanticDeduplicator(
+            model_name=cfg.processing.embedding_model,
+            similarity_threshold=cfg.processing.similarity_threshold,
+            cache_dir=str(cache_dir),
+            cache_days=cfg.processing.embedding_cache_days
+        )
+    else:
+        deduplicator = SimpleDeduplicator()
+    
     unique_items = deduplicator.deduplicate(raw_items)
     
-    summarizer = SimpleSummarizer(max_words=50)
-    processed_items = [summarizer.summarize(item) for item in unique_items]
+    # Use configured summarizer
+    if cfg.processing.summarizer == "openai":
+        try:
+            summarizer = OpenAISummarizer(
+                model=cfg.processing.openai_model,
+                max_words=cfg.processing.max_words,
+                max_quote_words=cfg.processing.max_quote_words,
+                temperature=cfg.processing.openai_temperature,
+                use_content_cleaning=cfg.processing.use_readability
+            )
+        except Exception as e:
+            click.echo(f"⚠️  OpenAI setup failed: {e}")
+            click.echo("Falling back to simple summarizer")
+            summarizer = SimpleSummarizer(max_words=cfg.processing.max_words)
+    else:
+        summarizer = SimpleSummarizer(max_words=cfg.processing.max_words)
+    
+    processed_items = []
+    for item in unique_items:
+        try:
+            processed = summarizer.summarize(item)
+            if processed.word_count > 0:  # Skip filtered items
+                processed_items.append(processed)
+        except Exception as e:
+            click.echo(f"⚠️  Failed to summarize {item.title}: {e}")
     
     # Plan episode
     episode_builder = SimpleEpisodeBuilder(target_minutes)

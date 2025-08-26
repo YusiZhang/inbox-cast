@@ -1,0 +1,44 @@
+rss_feeds:
+  - url: "https://www.technologyreview.com/feed/"
+    weight: 1.0
+  - url: "https://huggingface.co/blog/feed.xml" 
+    weight: 1.0
+  # - url: "https://hnrss.org/newest?points=300"
+  #   weight: 0.8
+
+target_duration: 10  # minutes
+dedupe_threshold: 0.9  # Legacy field for backward compatibility
+
+# Step 2: Smart Content Processing Configuration
+processing:
+  # Summarization settings
+  summarizer: "openai"  # "simple" or "openai"
+  max_words: 50
+  openai_model: "gpt-4o-mini"
+  openai_temperature: 0.3
+  
+  # Deduplication settings
+  deduplicator: "semantic"  # "simple" or "semantic"
+  similarity_threshold: 0.85
+  embedding_model: "all-MiniLM-L6-v2"
+  embedding_cache_days: 7
+  
+  # Content cleaning settings
+  use_readability: true
+  fetch_full_content: true
+  content_timeout: 10
+  
+  # Policy guard settings
+  max_quote_words: 30
+  strict_policy_mode: false
+
+voice_settings:
+  provider: "espeak"  # fallback for step 1
+  wpm: 165  # words per minute (comfortable listening speed)
+  voice_id: "default"
+
+output:
+  audio_format: "wav"
+  sample_rate: 44100
+  episode_filename: "episode.wav"
+  rss_filename: "feed.xml"

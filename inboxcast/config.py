@@ -27,12 +27,38 @@ class OutputConfig:
 
 
 @dataclass
+class ProcessingConfig:
+    """Configuration for content processing pipeline."""
+    # Summarization
+    summarizer: str = "simple"  # "simple" or "openai"
+    max_words: int = 50
+    openai_model: str = "gpt-4o-mini"
+    openai_temperature: float = 0.3
+    
+    # Deduplication  
+    deduplicator: str = "simple"  # "simple" or "semantic"
+    similarity_threshold: float = 0.85
+    embedding_model: str = "all-MiniLM-L6-v2"
+    embedding_cache_days: int = 7
+    
+    # Content cleaning
+    use_readability: bool = True
+    fetch_full_content: bool = True
+    content_timeout: int = 10
+    
+    # Policy guards
+    max_quote_words: int = 30
+    strict_policy_mode: bool = False
+
+
+@dataclass
 class Config:
     rss_feeds: List[FeedConfig]
     voice_settings: VoiceConfig
     output: OutputConfig
+    processing: ProcessingConfig
     target_duration: int = 10
-    dedupe_threshold: float = 0.9
+    dedupe_threshold: float = 0.9  # Legacy field for backward compatibility
 
     @classmethod
     def load(cls, config_path: str = "config.yaml") -> "Config":
@@ -53,10 +79,15 @@ class Config:
         # Convert output config
         output = OutputConfig(**data["output"])
         
+        # Convert processing config (with defaults for backward compatibility)
+        processing_data = data.get("processing", {})
+        processing = ProcessingConfig(**processing_data)
+        
         return cls(
             rss_feeds=feeds,
             target_duration=data["target_duration"],
-            dedupe_threshold=data["dedupe_threshold"],
+            dedupe_threshold=data.get("dedupe_threshold", 0.9),
             voice_settings=voice,
-            output=output
+            output=output,
+            processing=processing
         )
