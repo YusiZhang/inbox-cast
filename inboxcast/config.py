@@ -1,8 +1,29 @@
 """Configuration management for InboxCast."""
+import os
 import yaml
 from pathlib import Path
 from typing import Dict, List, Any
 from dataclasses import dataclass
+from dotenv import load_dotenv
+
+
+def load_dotenv_files():
+    """
+    Load environment variables from .env files in order of precedence:
+    1. Current working directory/.env
+    2. User home directory/.env
+    
+    Uses override=False to respect precedence (higher priority files won't be overwritten).
+    """
+    cwd_env = Path.cwd() / ".env"
+    home_env = Path.home() / ".env"
+    
+    # Load in reverse order of precedence so higher priority files override lower ones
+    if home_env.exists():
+        load_dotenv(home_env, override=False)
+    
+    if cwd_env.exists():
+        load_dotenv(cwd_env, override=False)
 
 
 @dataclass

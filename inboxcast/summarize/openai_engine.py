@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional
 from openai import OpenAI
 from ..types import RawItem, ProcessedItem, Summarizer
 from ..clean.readability import ReadabilityContentCleaner
+from ..config import load_dotenv_files
 
 
 class OpenAISummarizer(Summarizer):
@@ -36,6 +37,9 @@ class OpenAISummarizer(Summarizer):
             temperature: Generation temperature (0.0-1.0)
             use_content_cleaning: Whether to use readability cleaning
         """
+        # Load environment variables from .env files
+        load_dotenv_files()
+        
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError("OpenAI API key not found. Set OPENAI_API_KEY env var or pass api_key parameter")

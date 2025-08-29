@@ -221,6 +221,11 @@ def validate(config):
         # Check OpenAI setup if using OpenAI
         if cfg.processing.summarizer == "openai":
             import os
+            from ..config import load_dotenv_files
+            
+            # Load environment variables from .env files
+            load_dotenv_files()
+            
             if not os.getenv("OPENAI_API_KEY"):
                 click.echo("⚠️  OPENAI_API_KEY not set in environment")
             else:
