@@ -76,7 +76,7 @@ class RSSGenerator:
         
         return "\\n".join(formatted_items)
     
-    def generate_episode_metadata(self, items: List, episode_path: str) -> dict:
+    def generate_episode_metadata(self, items: List) -> dict:
         """Generate episode metadata JSON."""
         
         chapters = []
@@ -85,7 +85,8 @@ class RSSGenerator:
         for item in items:
             chapters.append({
                 "start_ms": current_time_ms,
-                "title": getattr(item, 'title', 'Untitled')
+                "title": getattr(item, 'title', 'Untitled'),
+                "key_topics": getattr(item, 'notes', {}).get('key_topics', [])
             })
             
             # Estimate duration for this item (rough)
@@ -120,7 +121,7 @@ class RSSGenerator:
             f.write(rss_content)
         
         # Generate and write metadata
-        metadata = self.generate_episode_metadata(items, episode_filename)
+        metadata = self.generate_episode_metadata(items)
         metadata_path = output_path / "episode.json"
         with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(metadata, f, indent=2)

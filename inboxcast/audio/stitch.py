@@ -115,7 +115,7 @@ class SimpleEpisodeBuilder:
             return []
         
         # Limit to reasonable number of items for the target duration
-        max_items_for_duration = min(len(sorted_items), self.target_minutes * 2)  # ~30 seconds per item
+        max_items_for_duration = min(len(sorted_items), self.target_minutes * 2) 
         selected_items = sorted_items[:max_items_for_duration]
         
         words_per_item = self.target_words // len(selected_items)
