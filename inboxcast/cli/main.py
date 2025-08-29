@@ -39,7 +39,7 @@ def run(config, output, minutes):
         
         # Step 1: Fetch RSS content
         click.echo("📡 Fetching RSS feeds...")
-        source = MultiRSSSource(cfg.rss_feeds)
+        source = MultiRSSSource(cfg.rss_feeds, cfg.max_rss_items)
         raw_items = source.fetch()
         
         if not raw_items:
@@ -70,7 +70,8 @@ def run(config, output, minutes):
                     max_words=cfg.processing.max_words,
                     max_quote_words=cfg.processing.max_quote_words,
                     temperature=cfg.processing.openai_temperature,
-                    use_content_cleaning=cfg.processing.use_readability
+                    use_content_cleaning=cfg.processing.use_readability,
+                    policy_checks=cfg.processing.policy_checks
                 )
                 click.echo(f"Using OpenAI summarizer ({cfg.processing.openai_model})")
             except Exception as e:

@@ -7,6 +7,7 @@ rss_feeds:
   #   weight: 0.8
 
 target_duration: 10  # minutes
+max_rss_items: 10  # Maximum items to fetch per RSS feed (reduces processing time)
 dedupe_threshold: 0.9  # Legacy field for backward compatibility
 
 # Step 2: Smart Content Processing Configuration
@@ -30,7 +31,20 @@ processing:
   
   # Policy guard settings
   max_quote_words: 30
-  strict_policy_mode: false
+  
+  # Policy checks configuration - split into pre-LLM and post-LLM phases
+  policy_checks:
+    # Pre-LLM checks (applied before OpenAI call - fast and cheap)
+    paywall_detection: false
+    min_content_length: true
+    content_quality_check: true
+    url_allowlist_check: false
+    
+    # Post-LLM checks (applied after OpenAI call)
+    max_word_count: false
+    quote_length_check: true
+    derivative_language_check: false
+    transformative_analysis_check: false  # Set to false for testing if too strict
 
 voice_settings:
   provider: "espeak"  # fallback for step 1

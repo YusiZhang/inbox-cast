@@ -6,7 +6,8 @@ from typing import Dict, Any, Optional
 from openai import OpenAI
 from ..types import RawItem, ProcessedItem, Summarizer
 from ..clean.readability import ReadabilityContentCleaner
-from ..config import load_dotenv_files
+from ..config import load_dotenv_files, PolicyChecksConfig
+from ..policy.pre_llm_checks import PreLLMPolicyChecker
 
 
 class OpenAISummarizer(Summarizer):
@@ -24,7 +25,8 @@ class OpenAISummarizer(Summarizer):
         max_words: int = 50,
         max_quote_words: int = 30,
         temperature: float = 0.3,
-        use_content_cleaning: bool = True
+        use_content_cleaning: bool = True,
+        policy_checks: Optional[PolicyChecksConfig] = None
     ):
         """
         Initialize OpenAI summarizer.
@@ -36,6 +38,7 @@ class OpenAISummarizer(Summarizer):
             max_quote_words: Maximum words allowed in direct quotes
             temperature: Generation temperature (0.0-1.0)
             use_content_cleaning: Whether to use readability cleaning
+            policy_checks: Configuration for policy checks (pre and post LLM)
         """
         # Load environment variables from .env files
         load_dotenv_files()
@@ -53,27 +56,35 @@ class OpenAISummarizer(Summarizer):
         # Initialize content cleaner if enabled
         self.content_cleaner = ReadabilityContentCleaner() if use_content_cleaning else None
         
+        # Initialize policy checkers
+        self.policy_checks = policy_checks or PolicyChecksConfig()
+        self.pre_llm_checker = PreLLMPolicyChecker(
+            paywall_detection=self.policy_checks.paywall_detection,
+            min_content_length=self.policy_checks.min_content_length,
+            content_quality_check=self.policy_checks.content_quality_check,
+            url_allowlist_check=self.policy_checks.url_allowlist_check,
+            use_readability=use_content_cleaning
+        )
+        
         # System prompt for summarization
         self.system_prompt = self._build_system_prompt()
     
     def summarize(self, item: RawItem) -> ProcessedItem:
         """Summarize item with OpenAI and apply policy guards."""
         try:
-            # Clean content if enabled
-            if self.content_cleaner:
-                cleaned_content = self.content_cleaner.extract_content(item.content, item.url)
-                paywall_detected = self.content_cleaner.detect_paywall(item.content, item.url)
-            else:
-                cleaned_content = self._basic_clean(item.content)
-                paywall_detected = self._basic_paywall_detection(item.content)
+            # Run pre-LLM checks first (fast, cheap)
+            pre_check_result = self.pre_llm_checker.check_item(item)
+            if not pre_check_result.passed:
+                return self._create_skipped_item(item, pre_check_result.reason, pre_check_result.notes)
             
-            # Skip if paywalled
-            if paywall_detected:
-                return self._create_skipped_item(item, "paywall_detected")
-            
-            # Skip if content too short
-            if len(cleaned_content.split()) < 20:
-                return self._create_skipped_item(item, "insufficient_content")
+            # Get cleaned content from pre-check notes (avoids duplicate processing)
+            cleaned_content = pre_check_result.notes.get("cleaned_content_preview", "")
+            if not cleaned_content or cleaned_content.endswith("..."):
+                # Need full content for summarization
+                if self.content_cleaner:
+                    cleaned_content = self.content_cleaner.extract_content(item.content, item.url)
+                else:
+                    cleaned_content = self._basic_clean(item.content)
             
             # Generate summary with OpenAI
             summary_result = self._generate_summary(item.title, cleaned_content)
@@ -81,8 +92,8 @@ class OpenAISummarizer(Summarizer):
             if not summary_result:
                 return self._create_skipped_item(item, "summarization_failed")
             
-            # Apply policy guards
-            policy_result = self._apply_policy_guards(summary_result)
+            # Apply post-LLM policy guards (only if enabled)
+            policy_result = self._apply_post_llm_policy_guards(summary_result)
             
             if not policy_result['passed']:
                 return self._create_skipped_item(item, f"policy_violation: {policy_result['reason']}")
@@ -97,7 +108,7 @@ class OpenAISummarizer(Summarizer):
                     "summary_method": "openai",
                     "model": self.model,
                     "original_length": len(cleaned_content.split()),
-                    "paywalled": paywall_detected,
+                    "paywalled": False,  # Pre-LLM check already filtered out paywalled content
                     "policy_checks": policy_result,
                     "key_topics": summary_result.get('key_topics', []),
                     "summary_type": summary_result.get('type', 'unknown')
@@ -107,7 +118,7 @@ class OpenAISummarizer(Summarizer):
             
         except Exception as e:
             print(f"Summarization failed for '{item.title}': {e}")
-            return self._create_skipped_item(item, f"error: {str(e)}")
+            return self._create_skipped_item(item, f"error: {str(e)}", {})
     
     def _generate_summary(self, title: str, content: str) -> Optional[Dict[str, Any]]:
         """Generate summary using OpenAI API."""
@@ -179,44 +190,54 @@ Article Content:
 
 Create a {self.max_words}-word podcast script that transforms this content into engaging audio commentary. Focus on insights and implications rather than direct quotes."""
     
-    def _apply_policy_guards(self, summary_result: Dict[str, Any]) -> Dict[str, Any]:
-        """Apply legal and policy compliance checks."""
+    def _apply_post_llm_policy_guards(self, summary_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Apply post-LLM legal and policy compliance checks."""
         script = summary_result['script']
         violations = []
-        
-        # Check word count
         word_count = len(script.split())
-        if word_count > self.max_words:
+        quotes = re.findall(r'"([^"]{10,})"', script)
+        
+        # Check word count (if enabled)
+        if self.policy_checks.max_word_count and word_count > self.max_words:
             violations.append(f"exceeds_word_limit: {word_count} > {self.max_words}")
         
-        # Check for long quotes (heuristic: text in quotes)
-        quotes = re.findall(r'"([^"]{10,})"', script)
-        for quote in quotes:
-            quote_words = len(quote.split())
-            if quote_words > self.max_quote_words:
-                violations.append(f"quote_too_long: {quote_words} words")
+        # Check for long quotes (if enabled)
+        if self.policy_checks.quote_length_check:
+            for quote in quotes:
+                quote_words = len(quote.split())
+                if quote_words > self.max_quote_words:
+                    violations.append(f"quote_too_long: {quote_words} words")
         
-        # Check for copy-paste indicators
-        if any(phrase in script.lower() for phrase in [
-            "according to the article",
-            "the article states",
-            "as mentioned in the piece",
-            "the author writes"
-        ]):
-            violations.append("derivative_language_detected")
+        # Check for copy-paste indicators (if enabled)
+        if self.policy_checks.derivative_language_check:
+            if any(phrase in script.lower() for phrase in [
+                "according to the article",
+                "the article states",
+                "as mentioned in the piece",
+                "the author writes"
+            ]):
+                violations.append("derivative_language_detected")
         
-        # Check for transformative content
-        transformative_indicators = [
-            "this means",
-            "the implications",
-            "why this matters",
-            "looking ahead",
-            "the key insight"
-        ]
-        
-        has_transformative = any(phrase in script.lower() for phrase in transformative_indicators)
-        if not has_transformative:
-            violations.append("lacks_transformative_analysis")
+        # Check for transformative content (if enabled)
+        if self.policy_checks.transformative_analysis_check:
+            transformative_indicators = [
+                "this means",
+                "the implications",
+                "why this matters",
+                "looking ahead",
+                "the key insight",
+                "what's significant",
+                "the takeaway",
+                "this suggests",
+                "in other words",
+                "to put it simply",
+                "the bigger picture",
+                "breaking it down"
+            ]
+            
+            has_transformative = any(phrase in script.lower() for phrase in transformative_indicators)
+            if not has_transformative:
+                violations.append("lacks_transformative_analysis")
         
         return {
             'passed': len(violations) == 0,
@@ -239,17 +260,22 @@ Create a {self.max_words}-word podcast script that transforms this content into 
         indicators = ["subscribe", "subscription", "premium", "sign in", "paywall"]
         return any(indicator in content.lower() for indicator in indicators)
     
-    def _create_skipped_item(self, item: RawItem, reason: str) -> ProcessedItem:
+    def _create_skipped_item(self, item: RawItem, reason: str, extra_notes: Dict[str, Any] = None) -> ProcessedItem:
         """Create a processed item for skipped content."""
+        notes = {
+            "source": item.source_name,
+            "skipped": True,
+            "skip_reason": reason,
+            "summary_method": "openai"
+        }
+        
+        if extra_notes:
+            notes.update(extra_notes)
+        
         return ProcessedItem(
             title=item.title,
             script="",  # Empty script for skipped items
             sources=[item.url],
-            notes={
-                "source": item.source_name,
-                "skipped": True,
-                "skip_reason": reason,
-                "summary_method": "openai"
-            },
+            notes=notes,
             word_count=0
         )

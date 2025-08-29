@@ -48,6 +48,22 @@ class OutputConfig:
 
 
 @dataclass
+class PolicyChecksConfig:
+    """Configuration for policy compliance checks."""
+    # Pre-LLM checks (applied before OpenAI call)
+    paywall_detection: bool = True
+    min_content_length: bool = True
+    content_quality_check: bool = True
+    url_allowlist_check: bool = False
+    
+    # Post-LLM checks (applied after OpenAI call)  
+    max_word_count: bool = True
+    quote_length_check: bool = True
+    derivative_language_check: bool = True
+    transformative_analysis_check: bool = True
+
+
+@dataclass
 class ProcessingConfig:
     """Configuration for content processing pipeline."""
     # Summarization
@@ -69,7 +85,9 @@ class ProcessingConfig:
     
     # Policy guards
     max_quote_words: int = 30
-    strict_policy_mode: bool = False
+    
+    # Policy checks configuration
+    policy_checks: PolicyChecksConfig = None
 
 
 @dataclass
@@ -79,6 +97,7 @@ class Config:
     output: OutputConfig
     processing: ProcessingConfig
     target_duration: int = 10
+    max_rss_items: int = 20  # Maximum items to fetch per RSS feed
     dedupe_threshold: float = 0.9  # Legacy field for backward compatibility
 
     @classmethod
@@ -102,11 +121,18 @@ class Config:
         
         # Convert processing config (with defaults for backward compatibility)
         processing_data = data.get("processing", {})
+        
+        # Handle policy checks configuration
+        policy_checks_data = processing_data.get("policy_checks", {})
+        policy_checks = PolicyChecksConfig(**policy_checks_data) if policy_checks_data else PolicyChecksConfig()
+        processing_data["policy_checks"] = policy_checks
+        
         processing = ProcessingConfig(**processing_data)
         
         return cls(
             rss_feeds=feeds,
             target_duration=data["target_duration"],
+            max_rss_items=data.get("max_rss_items", 20),
             dedupe_threshold=data.get("dedupe_threshold", 0.9),
             voice_settings=voice,
             output=output,

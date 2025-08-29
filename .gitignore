@@ -14,5 +14,6 @@ wheels/
 .vscode/
 
 # output files
-out/
+out*/
+test_output*/
 

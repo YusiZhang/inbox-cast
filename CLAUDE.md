@@ -22,7 +22,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Private tokenized RSS feeds
 
 ## Development Commands
-*To be added when project is initialized*
+- use uv to manage and run project. i.e `uv run inboxcast run`
 
 ## Reference Documents
 - Full PRD: `.claude/prompts/PRD-MVP.md`

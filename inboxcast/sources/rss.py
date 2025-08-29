@@ -10,8 +10,9 @@ from ..config import FeedConfig
 class RSSSource(Source):
     """Simple RSS source fetcher."""
     
-    def __init__(self, feed_config: FeedConfig):
+    def __init__(self, feed_config: FeedConfig, max_items: Optional[int] = None):
         self.feed_config = feed_config
+        self.max_items = max_items
     
     def fetch(self) -> List[RawItem]:
         """Fetch items from RSS feed."""
@@ -26,7 +27,9 @@ class RSSSource(Source):
             source_name = getattr(feed.feed, 'title', 'Unknown')
             
             items = []
-            for entry in feed.entries:
+            entries_to_process = feed.entries[:self.max_items] if self.max_items else feed.entries
+            
+            for entry in entries_to_process:
                 # Extract content (try multiple fields)
                 content = self._extract_content(entry)
                 
@@ -42,7 +45,12 @@ class RSSSource(Source):
                 )
                 items.append(item)
                 
-            print(f"Fetched {len(items)} items from {source_name}")
+            total_available = len(feed.entries)
+            fetched_count = len(items)
+            if self.max_items and total_available > self.max_items:
+                print(f"Fetched {fetched_count} items from {source_name} (limited from {total_available} total)")
+            else:
+                print(f"Fetched {fetched_count} items from {source_name}")
             return items
             
         except Exception as e:
@@ -86,8 +94,8 @@ class RSSSource(Source):
 class MultiRSSSource(Source):
     """Aggregates multiple RSS sources."""
     
-    def __init__(self, feed_configs: List[FeedConfig]):
-        self.sources = [RSSSource(config) for config in feed_configs]
+    def __init__(self, feed_configs: List[FeedConfig], max_items_per_feed: Optional[int] = None):
+        self.sources = [RSSSource(config, max_items_per_feed) for config in feed_configs]
     
     def fetch(self) -> List[RawItem]:
         """Fetch from all RSS sources."""
