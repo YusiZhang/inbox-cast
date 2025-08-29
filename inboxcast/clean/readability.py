@@ -58,6 +58,16 @@ class ReadabilityContentCleaner:
     def _extract_with_readability(self, html_content: str) -> str:
         """Extract main content using readability algorithm."""
         try:
+            # Validate HTML content before processing
+            if not html_content or not html_content.strip():
+                print("HTML content is empty, falling back to basic cleaning")
+                return self._basic_html_clean(html_content or "")
+            
+            # Check if content has minimal HTML structure
+            if len(html_content.strip()) < 50:
+                print("HTML content too short for readability processing")
+                return self._basic_html_clean(html_content)
+            
             # Use readability to extract main content
             doc = Document(html_content)
             article_html = doc.summary()

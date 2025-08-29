@@ -121,25 +121,47 @@ class OpenAISummarizer(Summarizer):
             return self._create_skipped_item(item, f"error: {str(e)}", {})
     
     def _generate_summary(self, title: str, content: str) -> Optional[Dict[str, Any]]:
-        """Generate summary using OpenAI API."""
+        """Generate summary using OpenAI Response API."""
         try:
-            # Prepare user prompt
-            user_prompt = self._build_user_prompt(title, content)
+            # Prepare input prompt
+            input_prompt = self._build_user_prompt(title, content)
             
-            # Call OpenAI
-            response = self.client.chat.completions.create(
+            # Call OpenAI Response API with structured output
+            response = self.client.responses.create(
                 model=self.model,
-                messages=[
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
+                instructions=self.system_prompt,
+                input=input_prompt,
                 temperature=self.temperature,
-                max_tokens=200,  # Conservative limit for summaries
-                response_format={"type": "json_object"}
+                max_output_tokens=200,  # Conservative limit for summaries
+                text={
+                    "format": {
+                        "type": "json_schema",
+                        "name": "podcast_script",
+                        "description": "A podcast script with metadata",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "script": {"type": "string"},
+                                "type": {"type": "string"},
+                                "key_topics": {
+                                    "type": "array",
+                                    "items": {"type": "string"}
+                                }
+                            },
+                            "required": ["script", "type", "key_topics"],
+                            "additionalProperties": False
+                        }
+                    }
+                }
             )
             
-            # Parse JSON response
-            result = json.loads(response.choices[0].message.content)
+            # Get output text and parse JSON
+            output_text = response.output_text
+            if not output_text or not output_text.strip():
+                print("Response output_text is empty")
+                return None
+                
+            result = json.loads(output_text)
             
             # Validate required fields
             if not all(key in result for key in ['script', 'type', 'key_topics']):

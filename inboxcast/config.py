@@ -6,6 +6,9 @@ from typing import Dict, List, Any
 from dataclasses import dataclass
 from dotenv import load_dotenv
 
+# Disable tokenizers parallelism to avoid warning in forked processes
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 
 def load_dotenv_files():
     """
