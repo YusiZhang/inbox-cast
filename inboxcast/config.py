@@ -37,17 +37,33 @@ class FeedConfig:
 
 @dataclass  
 class VoiceConfig:
-    provider: str = "espeak"
+    provider: str = "espeak"  # "minimax", "espeak", "dummy"
     wpm: int = 165
-    voice_id: str = "default"
+    voice_id: str = "default"  # For MiniMax: "male-qn-qingse", "female-shaonv", etc.
+    # MiniMax-specific settings
+    speed: float = 1.0  # 0.5-2.0 for MiniMax
+    vol: float = 1.0    # Volume for MiniMax
+    pitch: float = 0.0  # Pitch adjustment for MiniMax
+
+
+@dataclass
+class AudioConfig:
+    """Professional audio processing settings."""
+    use_professional_stitcher: bool = True  # Use ProfessionalAudioStitcher vs SimpleAudioStitcher
+    gap_ms: int = 500               # Gap between segments in milliseconds
+    fade_ms: int = 50               # Fade in/out duration in milliseconds
+    target_lufs: float = -19.0      # Target loudness in LUFS (broadcast standard)
+    normalize_audio: bool = True    # Apply audio normalization
 
 
 @dataclass
 class OutputConfig:
-    audio_format: str = "mp3"
+    audio_format: str = "mp3"  # "wav", "mp3"
     sample_rate: int = 44100
+    bitrate: str = "128k"      # For MP3 output
     episode_filename: str = "episode.mp3"
     rss_filename: str = "feed.xml"
+    script_filename: str = "episode_script.txt"
 
 
 @dataclass
@@ -99,6 +115,7 @@ class Config:
     voice_settings: VoiceConfig
     output: OutputConfig
     processing: ProcessingConfig
+    audio: AudioConfig
     target_duration: int = 10
     max_rss_items: int = 20  # Maximum items to fetch per RSS feed
     dedupe_threshold: float = 0.9  # Legacy field for backward compatibility
@@ -132,6 +149,10 @@ class Config:
         
         processing = ProcessingConfig(**processing_data)
         
+        # Convert audio config (with defaults for backward compatibility)
+        audio_data = data.get("audio", {})
+        audio = AudioConfig(**audio_data)
+        
         return cls(
             rss_feeds=feeds,
             target_duration=data["target_duration"],
@@ -139,5 +160,6 @@ class Config:
             dedupe_threshold=data.get("dedupe_threshold", 0.9),
             voice_settings=voice,
             output=output,
-            processing=processing
+            processing=processing,
+            audio=audio
         )

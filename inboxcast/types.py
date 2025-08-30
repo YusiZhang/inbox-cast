@@ -72,3 +72,23 @@ class EpisodeBuilder(Protocol):
     def fit(self, items: List[ProcessedItem], target_minutes: int) -> List[PlannedItem]:
         """Fit items to target duration with word budgeting."""
         ...
+
+
+# MiniMax TTS Models
+@dataclass
+class VoiceOverRequest:
+    """Request model for MiniMax TTS API."""
+    text: str
+    voice_id: str = "female-shaonv"
+    speed: float = 1.0
+    vol: float = 1.0
+    pitch: float = 0.0
+
+
+@dataclass
+class VoiceOverResponse:
+    """Response model from MiniMax TTS API."""
+    success: bool
+    audio_data: Optional[bytes] = None
+    audio_format: str = "mp3"
+    error_message: Optional[str] = None

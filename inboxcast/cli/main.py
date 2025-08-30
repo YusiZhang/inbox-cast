@@ -9,8 +9,10 @@ from ..dedupe.semantic import SemanticDeduplicator
 from ..summarize.engine import SimpleSummarizer
 from ..summarize.openai_engine import OpenAISummarizer
 from ..tts.espeak import EspeakProvider, DummyTTSProvider
-from ..audio.stitch import SimpleAudioStitcher, SimpleEpisodeBuilder
+from ..tts.minimax import MiniMaxProvider
+from ..audio.stitch import SimpleAudioStitcher, ProfessionalAudioStitcher, SimpleEpisodeBuilder
 from ..output.rss import RSSGenerator
+from ..utils.script_parser import ScriptParser
 
 
 @click.group()
@@ -109,31 +111,68 @@ def run(config, output, minutes):
         episode_builder = SimpleEpisodeBuilder(target_minutes)
         planned_items = episode_builder.fit(processed_items, target_minutes)
         
+        # Step 4.5: Generate episode script (early so TTS command can use it)
+        click.echo("📝 Generating episode script...")
+        script_path = output_path / "episode_script.txt"
+        with open(script_path, 'w', encoding='utf-8') as f:
+            f.write(f"InboxCast Episode Script - {datetime.now().strftime('%Y-%m-%d')}\n")
+            f.write("=" * 60 + "\n\n")
+            for i, item in enumerate(planned_items, 1):
+                f.write(f"{i}. Title: {item.title}\n")
+                f.write(f"   Words: {item.word_count}\n")
+                f.write(f"   Script: {item.script}\n\n")
+        
         # Step 5: Generate audio
         click.echo("🗣️  Generating audio...")
         
-        # Choose TTS provider based on config
-        if cfg.voice_settings.provider == "dummy":
-            click.echo("Using dummy TTS provider")
-            tts_provider = DummyTTSProvider()
-        else:
-            # Try espeak first, fallback to dummy
+        # Choose TTS provider based on config with fallback chain: MiniMax → espeak → dummy
+        tts_provider = None
+        
+        if cfg.voice_settings.provider == "minimax":
             try:
-                tts_provider = EspeakProvider()
-            except:
-                click.echo("⚠️  Espeak not available, using dummy TTS")
+                tts_provider = MiniMaxProvider()
+                if tts_provider.test_connection():
+                    click.echo("✅ Using MiniMax TTS provider")
+                else:
+                    click.echo("⚠️  MiniMax connection failed, falling back to espeak")
+                    tts_provider = None
+            except Exception as e:
+                click.echo(f"⚠️  MiniMax setup failed: {e}, falling back to espeak")
+        
+        if not tts_provider:
+            if cfg.voice_settings.provider == "dummy":
+                click.echo("Using dummy TTS provider")
                 tts_provider = DummyTTSProvider()
+            else:
+                # Try espeak, fallback to dummy
+                try:
+                    tts_provider = EspeakProvider()
+                    click.echo("✅ Using espeak TTS provider")
+                except:
+                    click.echo("⚠️  Espeak not available, using dummy TTS")
+                    tts_provider = DummyTTSProvider()
         
         audio_segments = []
         titles = []
         
         for item in planned_items:
             try:
-                audio_data = tts_provider.synthesize(
-                    item.script,
-                    voice=cfg.voice_settings.voice_id,
-                    wpm=cfg.voice_settings.wpm
-                )
+                # Pass MiniMax-specific parameters if using MiniMax provider
+                if isinstance(tts_provider, MiniMaxProvider):
+                    audio_data = tts_provider.synthesize(
+                        item.script,
+                        voice=cfg.voice_settings.voice_id,
+                        wpm=cfg.voice_settings.wpm,
+                        speed=cfg.voice_settings.speed,
+                        vol=cfg.voice_settings.vol,
+                        pitch=cfg.voice_settings.pitch
+                    )
+                else:
+                    audio_data = tts_provider.synthesize(
+                        item.script,
+                        voice=cfg.voice_settings.voice_id,
+                        wpm=cfg.voice_settings.wpm
+                    )
                 if audio_data:
                     audio_segments.append(audio_data)
                     titles.append(item.title)
@@ -146,25 +185,34 @@ def run(config, output, minutes):
         
         # Step 6: Stitch audio
         click.echo("🎵 Stitching audio segments...")
-        stitcher = SimpleAudioStitcher(gap_ms=200)
+        if cfg.audio.use_professional_stitcher:
+            stitcher = ProfessionalAudioStitcher(
+                gap_ms=cfg.audio.gap_ms,
+                fade_ms=cfg.audio.fade_ms,
+                target_lufs=cfg.audio.target_lufs
+            )
+        else:
+            stitcher = SimpleAudioStitcher(gap_ms=cfg.audio.gap_ms)
+        
         combined_audio = stitcher.stitch(audio_segments, titles)
         
-        # Export to WAV (for Step 1)
-        episode_path = output_path / cfg.output.episode_filename.replace('.mp3', '.wav')
-        stitcher.export_wav(combined_audio, str(episode_path))
+        # Export audio in configured format
+        episode_path = output_path / cfg.output.episode_filename
         
-        # Step 7: Generate episode script
-        click.echo("📝 Generating episode script...")
-        script_path = output_path / "episode_script.txt"
-        with open(script_path, 'w', encoding='utf-8') as f:
-            f.write(f"InboxCast Episode Script - {datetime.now().strftime('%Y-%m-%d')}\n")
-            f.write("=" * 60 + "\n\n")
-            for i, item in enumerate(planned_items, 1):
-                f.write(f"{i}. {item.title}\n")
-                f.write(f"   Words: {item.word_count}\n")
-                f.write(f"   Script: {item.script}\n\n")
+        if cfg.output.audio_format.lower() == "mp3" and hasattr(stitcher, 'export_mp3'):
+            try:
+                stitcher.export_mp3(combined_audio, str(episode_path), bitrate=cfg.output.bitrate)
+            except Exception as e:
+                click.echo(f"⚠️  MP3 export failed: {e}, falling back to WAV")
+                episode_path = episode_path.with_suffix('.wav')
+                stitcher.export_wav(combined_audio, str(episode_path))
+        else:
+            # Default to WAV export
+            if episode_path.suffix.lower() != '.wav':
+                episode_path = episode_path.with_suffix('.wav')
+            stitcher.export_wav(combined_audio, str(episode_path))
         
-        # Step 8: Generate RSS feed
+        # Step 7: Generate RSS feed
         click.echo("📻 Generating RSS feed...")
         rss_generator = RSSGenerator()
         rss_generator.write_files(str(output_path), cfg.output.episode_filename, planned_items)
@@ -320,6 +368,162 @@ def plan(config, minutes):
             f.write(f"   Words: {item.word_count}\n")
             f.write(f"   Script: {item.script}\n\n")
     click.echo(f"📝 Full script saved to: {script_path}")
+
+
+@cli.command()
+@click.option('--config', '-c', default='config.yaml', help='Configuration file')
+@click.option('--output', '-o', default='out', help='Output directory')
+@click.option('--script-path', '-s', help='Path to episode script file (overrides config-based path)')
+@click.option('--provider', '-p', help='TTS provider override (minimax, espeak, dummy)')
+def tts(config, output, script_path, provider):
+    """Generate audio from saved episode script without running LLM pipeline."""
+    
+    try:
+        # Load configuration
+        cfg = Config.load(config)
+        output_path = Path(output)
+        
+        click.echo("🗣️  Running TTS-only pipeline...")
+        
+        # Find script file
+        if script_path:
+            script_file = script_path
+        else:
+            # Look for script in output directory
+            parser = ScriptParser()
+            script_file = parser.find_script_file(str(output_path))
+            
+        if not script_file:
+            click.echo("❌ No script file found. Run 'inboxcast run' first or specify --script-path")
+            return
+            
+        click.echo(f"📖 Reading script from: {script_file}")
+        
+        # Parse script file
+        parser = ScriptParser()
+        planned_items = parser.parse_script_file(script_file)
+        
+        if not planned_items:
+            click.echo("❌ No items found in script file")
+            return
+            
+        click.echo(f"📋 Found {len(planned_items)} items in script")
+        
+        # Create output directory
+        output_path.mkdir(parents=True, exist_ok=True)
+        
+        # Choose TTS provider
+        tts_provider = None
+        provider_name = provider or cfg.voice_settings.provider
+        
+        if provider_name == "minimax":
+            try:
+                tts_provider = MiniMaxProvider()
+                if not tts_provider.test_connection():
+                    click.echo("⚠️  MiniMax connection failed, falling back to espeak")
+                    tts_provider = None
+                else:
+                    click.echo("✅ Using MiniMax TTS provider")
+            except Exception as e:
+                click.echo(f"⚠️  MiniMax setup failed: {e}, falling back to espeak")
+        
+        if not tts_provider:
+            if provider_name == "dummy" or (not provider_name and cfg.voice_settings.provider == "dummy"):
+                click.echo("Using dummy TTS provider")
+                tts_provider = DummyTTSProvider()
+            else:
+                # Try espeak, fallback to dummy
+                try:
+                    tts_provider = EspeakProvider()
+                    click.echo("✅ Using espeak TTS provider")
+                except:
+                    click.echo("⚠️  Espeak not available, using dummy TTS")
+                    tts_provider = DummyTTSProvider()
+        
+        # Generate audio for each item
+        audio_segments = []
+        titles = []
+        
+        for i, item in enumerate(planned_items, 1):
+            click.echo(f"🔊 Processing item {i}/{len(planned_items)}: {item.title[:50]}...")
+            
+            try:
+                # Pass MiniMax-specific parameters if using MiniMax provider
+                if isinstance(tts_provider, MiniMaxProvider):
+                    audio_data = tts_provider.synthesize(
+                        item.script,
+                        voice=cfg.voice_settings.voice_id,
+                        wpm=cfg.voice_settings.wpm,
+                        speed=cfg.voice_settings.speed,
+                        vol=cfg.voice_settings.vol,
+                        pitch=cfg.voice_settings.pitch
+                    )
+                else:
+                    audio_data = tts_provider.synthesize(
+                        item.script,
+                        voice=cfg.voice_settings.voice_id,
+                        wpm=cfg.voice_settings.wpm
+                    )
+                if audio_data:
+                    audio_segments.append(audio_data)
+                    titles.append(item.title)
+                    click.echo(f"✅ Generated audio for: {item.title[:50]}...")
+                else:
+                    click.echo(f"⚠️  No audio generated for: {item.title[:50]}...")
+            except Exception as e:
+                click.echo(f"⚠️  TTS failed for {item.title[:50]}...: {e}")
+        
+        if not audio_segments:
+            click.echo("❌ No audio generated")
+            return
+        
+        # Stitch audio segments
+        click.echo("🎵 Stitching audio segments...")
+        if cfg.audio.use_professional_stitcher:
+            stitcher = ProfessionalAudioStitcher(
+                gap_ms=cfg.audio.gap_ms,
+                fade_ms=cfg.audio.fade_ms,
+                target_lufs=cfg.audio.target_lufs
+            )
+        else:
+            stitcher = SimpleAudioStitcher(gap_ms=cfg.audio.gap_ms)
+        
+        combined_audio = stitcher.stitch(audio_segments, titles)
+        
+        # Export audio in configured format
+        episode_path = output_path / cfg.output.episode_filename
+        
+        if cfg.output.audio_format.lower() == "mp3" and hasattr(stitcher, 'export_mp3'):
+            try:
+                stitcher.export_mp3(combined_audio, str(episode_path), bitrate=cfg.output.bitrate)
+            except Exception as e:
+                click.echo(f"⚠️  MP3 export failed: {e}, falling back to WAV")
+                episode_path = episode_path.with_suffix('.wav')
+                stitcher.export_wav(combined_audio, str(episode_path))
+        else:
+            # Default to WAV export
+            if episode_path.suffix.lower() != '.wav':
+                episode_path = episode_path.with_suffix('.wav')
+            stitcher.export_wav(combined_audio, str(episode_path))
+        
+        # Generate RSS feed using existing planned items
+        click.echo("📻 Generating RSS feed...")
+        rss_generator = RSSGenerator()
+        rss_generator.write_files(str(output_path), cfg.output.episode_filename, planned_items)
+        
+        # Summary
+        total_items = len(audio_segments)
+        total_words = sum(item.word_count for item in planned_items[:total_items])
+        
+        click.echo("✅ TTS pipeline completed!")
+        click.echo(f"   📊 {total_items} items, {total_words} words")
+        click.echo(f"   🎧 Episode: {episode_path}")
+        click.echo(f"   📡 RSS feed: {output_path / 'feed.xml'}")
+        click.echo(f"   📋 Metadata: {output_path / 'episode.json'}")
+        
+    except Exception as e:
+        click.echo(f"❌ TTS pipeline failed: {e}")
+        raise
 
 
 if __name__ == '__main__':
