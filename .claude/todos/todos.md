@@ -28,3 +28,4 @@ To disable this warning, you can either:
         - Explicitly set the environment variable TOKENIZERS_PARALLELISM=(true | false)
 ```
 
+- [ ] each generated audio segment should be saved to /out

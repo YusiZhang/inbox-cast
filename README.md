@@ -9,17 +9,18 @@ AI newsletter summarization to private audio podcasts. Converts user-forwarded A
 **System Requirements:**
 - Python 3.8+
 - `espeak` for text-to-speech synthesis
+- `ffmpeg` for mp3 audio format support
 
-**Install espeak:**
+**Install espeak,ffmpeg:**
 ```bash
 # macOS
 brew install espeak
+brew install ffmpeg
 
 # Ubuntu/Debian
 sudo apt-get install espeak
+sudo apt-get install ffmpeg
 
-# Other systems
-# See: http://espeak.sourceforge.net/download.html
 ```
 
 **Install Python dependencies:**
