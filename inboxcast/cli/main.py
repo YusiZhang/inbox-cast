@@ -14,6 +14,9 @@ from ..audio.stitch import SimpleAudioStitcher, ProfessionalAudioStitcher, Simpl
 from ..output.rss import RSSGenerator
 from ..utils.script_parser import ScriptParser
 
+from ..config import load_dotenv_files
+# Load environment variables from .env files
+load_dotenv_files()
 
 @click.group()
 def cli():

@@ -43,7 +43,7 @@ class VoiceConfig:
     # MiniMax-specific settings
     speed: float = 1.0  # 0.5-2.0 for MiniMax
     vol: float = 1.0    # Volume for MiniMax
-    pitch: float = 0.0  # Pitch adjustment for MiniMax
+    pitch: int = 0  # Pitch adjustment for MiniMax
 
 
 @dataclass

@@ -15,7 +15,7 @@ class MiniMaxProvider(BaseTTSProvider):
         api_key: Optional[str] = None,
         group_id: Optional[str] = None,
         base_url: Optional[str] = None,
-        max_retries: int = 3,
+        max_retries: int = 1,
         retry_delay: float = 1.0,
     ):
         """
@@ -50,7 +50,7 @@ class MiniMaxProvider(BaseTTSProvider):
         format: str = "wav",
         speed: Optional[float] = None,
         vol: Optional[float] = None,
-        pitch: Optional[float] = None
+        pitch: Optional[int] = None
     ) -> bytes:
         """Synthesize text to audio bytes using MiniMax API."""
         
@@ -60,7 +60,7 @@ class MiniMaxProvider(BaseTTSProvider):
             voice_id=voice,
             speed=speed if speed is not None else self._wpm_to_speed(wpm),
             vol=vol if vol is not None else 1.0,
-            pitch=pitch if pitch is not None else 0.0
+            pitch=pitch if pitch is not None else 0
         )
         
         # Generate voice-over

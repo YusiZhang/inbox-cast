@@ -16,7 +16,7 @@ voice_settings:
   # MiniMax-specific settings
   speed: 1.0    # 0.5-2.0 speed multiplier
   vol: 1.0      # Volume level
-  pitch: 0.0    # Pitch adjustment
+  pitch: 0    # Pitch adjustment
 
 # Professional audio processing
 audio:

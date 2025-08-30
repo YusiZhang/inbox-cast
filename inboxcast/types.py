@@ -82,7 +82,7 @@ class VoiceOverRequest:
     voice_id: str = "female-shaonv"
     speed: float = 1.0
     vol: float = 1.0
-    pitch: float = 0.0
+    pitch: int = 0
 
 
 @dataclass
