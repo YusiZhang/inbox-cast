@@ -55,12 +55,21 @@ class MiniMaxProvider(BaseTTSProvider):
         """Synthesize text to audio bytes using MiniMax API."""
         
         # Create request object with optional parameters
+        from ..types import AudioSettings
+        
+        audio_settings = AudioSettings(
+            format="mp3" if format == "wav" else format,  # Convert wav to mp3 for compatibility
+            sample_rate=sample_rate if sample_rate <= 44100 else 32000,
+            channels=1
+        )
+        
         request = VoiceOverRequest(
             text=text,
             voice_id=voice,
             speed=speed if speed is not None else self._wpm_to_speed(wpm),
             vol=vol if vol is not None else 1.0,
-            pitch=pitch if pitch is not None else 0
+            pitch=pitch if pitch is not None else 0,
+            audio_settings=audio_settings
         )
         
         # Generate voice-over
@@ -117,21 +126,32 @@ class MiniMaxProvider(BaseTTSProvider):
         """Make a single API request to MiniMax."""
         
         # Prepare request payload for MiniMax API
+        voice_setting = {
+            "voice_id": request.voice_id,
+            "speed": request.speed,
+            "vol": request.vol,
+            "pitch": request.pitch,
+        }
+        
+        # Add emotion if specified and supported by model
+        if hasattr(request, 'emotion') and request.emotion:
+            if request.model in ["speech-02-hd", "speech-02-turbo", "speech-01-turbo", "speech-01-hd"]:
+                voice_setting["emotion"] = request.emotion
+        
+        # Add english normalization if specified
+        if hasattr(request, 'english_normalization') and request.english_normalization:
+            voice_setting["english_normalization"] = request.english_normalization
+        
         payload = {
-            "model": "speech-02-turbo",
+            "model": request.model,
             "text": request.text,
-            "stream": False,
-            "voice_setting": {
-                "voice_id": request.voice_id,
-                "speed": request.speed,
-                "vol": request.vol,
-                "pitch": request.pitch,
-            },
+            "stream": request.stream if hasattr(request, 'stream') else False,
+            "voice_setting": voice_setting,
             "audio_setting": {
-                "sample_rate": 32000,
-                "bitrate": 128000,
-                "format": "mp3",
-                "channel": 1,
+                "sample_rate": request.audio_settings.sample_rate,
+                "bitrate": request.audio_settings.bitrate,
+                "format": request.audio_settings.format,
+                "channel": request.audio_settings.channels,
             },
         }
 
@@ -145,12 +165,20 @@ class MiniMaxProvider(BaseTTSProvider):
                 audio_hex = response_data.get("data", {}).get("audio")
                 if audio_hex:
                     audio_bytes = bytes.fromhex(audio_hex)
+                    
+                    # Extract additional response metadata
+                    extra_info = response_data.get("extra_info", {})
+                    
                     return VoiceOverResponse(
                         success=True,
                         audio_data=audio_bytes,
-                        audio_format=response_data.get("extra_info", {}).get(
-                            "audio_format", "mp3"
-                        ),
+                        audio_format=extra_info.get("audio_format", request.audio_settings.format),
+                        audio_duration=extra_info.get("audio_length", 0.0) / 1000.0,  # Convert ms to seconds
+                        audio_size=len(audio_bytes),
+                        processing_time=extra_info.get("processing_time"),
+                        model_used=payload["model"],
+                        characters_processed=len(request.text),
+                        request_id=response_data.get("request_id"),
                     )
                 else:
                     return VoiceOverResponse(
