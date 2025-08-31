@@ -151,7 +151,7 @@ class SimpleEpisodeBuilder:
 class ProfessionalAudioStitcher:
     """Professional audio stitching with pydub and normalization features."""
     
-    def __init__(self, gap_ms: int = 500, fade_ms: int = 50, target_lufs: float = -19.0):
+    def __init__(self, gap_ms: int = 500, fade_ms: int = 50, target_lufs: float = -19.0, output_format: str = "wav"):
         """
         Initialize professional audio stitcher.
         
@@ -159,10 +159,12 @@ class ProfessionalAudioStitcher:
             gap_ms: Gap between segments in milliseconds
             fade_ms: Fade in/out duration in milliseconds
             target_lufs: Target loudness in LUFS (-19.0 is broadcast standard)
+            output_format: Output audio format ("wav" or "mp3")
         """
         self.gap_ms = gap_ms
         self.fade_ms = fade_ms
         self.target_lufs = target_lufs
+        self.output_format = output_format
         
         # Try importing pydub
         try:
@@ -237,8 +239,8 @@ class ProfessionalAudioStitcher:
         # Final normalization and loudness adjustment
         combined = self._apply_broadcast_normalization(combined)
         
-        # Export to bytes
-        return self._export_to_bytes(combined, format="wav")
+        # Export to bytes using configured output format
+        return self._export_to_bytes(combined, format=self.output_format)
     
     def _load_audio_segment(self, audio_data: bytes):
         """Load audio data into AudioSegment, detecting format."""

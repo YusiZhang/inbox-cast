@@ -192,7 +192,8 @@ def run(config, output, minutes):
             stitcher = ProfessionalAudioStitcher(
                 gap_ms=cfg.audio.gap_ms,
                 fade_ms=cfg.audio.fade_ms,
-                target_lufs=cfg.audio.target_lufs
+                target_lufs=cfg.audio.target_lufs,
+                output_format=cfg.output.audio_format
             )
         else:
             stitcher = SimpleAudioStitcher(gap_ms=cfg.audio.gap_ms)
@@ -486,7 +487,8 @@ def tts(config, output, script_path, provider):
             stitcher = ProfessionalAudioStitcher(
                 gap_ms=cfg.audio.gap_ms,
                 fade_ms=cfg.audio.fade_ms,
-                target_lufs=cfg.audio.target_lufs
+                target_lufs=cfg.audio.target_lufs,
+                output_format=cfg.output.audio_format
             )
         else:
             stitcher = SimpleAudioStitcher(gap_ms=cfg.audio.gap_ms)
