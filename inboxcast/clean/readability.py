@@ -131,6 +131,7 @@ class ReadabilityContentCleaner:
     
     def detect_paywall(self, content: str, url: Optional[str] = None) -> bool:
         """Enhanced paywall detection."""
+        # TODO: Implement more sophisticated paywall detection logic
         content_lower = content.lower()
         
         # Strong paywall indicators

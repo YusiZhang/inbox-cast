@@ -29,3 +29,4 @@ To disable this warning, you can either:
 ```
 
 - [ ] each generated audio segment should be saved to /out
+- [ ] implement more sophisticated paywall detection logic
