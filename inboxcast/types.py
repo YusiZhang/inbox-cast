@@ -36,6 +36,26 @@ class PlannedItem:
     allocated_words: int
 
 
+@dataclass
+class EpisodeScript:
+    """Complete episode script with structured sections."""
+    introduction: str
+    segments: List['EpisodeSegment']
+    conclusion: str
+    total_word_count: int
+    estimated_duration_minutes: float
+    metadata: Dict[str, Any]
+
+
+@dataclass
+class EpisodeSegment:
+    """Themed segment within an episode."""
+    theme_title: str
+    transition: str
+    items: List[PlannedItem]
+    word_count: int
+
+
 class Source(Protocol):
     """RSS source fetcher contract."""
     

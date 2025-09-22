@@ -13,6 +13,7 @@ from ..tts.minimax import MiniMaxProvider
 from ..audio.stitch import SimpleAudioStitcher, ProfessionalAudioStitcher, SimpleEpisodeBuilder
 from ..output.rss import RSSGenerator
 from ..utils.script_parser import ScriptParser
+from ..script.episode_engine import EpisodeScriptEngine
 
 from ..config import load_dotenv_files
 # Load environment variables from .env files
@@ -114,16 +115,66 @@ def run(config, output, minutes):
         episode_builder = SimpleEpisodeBuilder(target_minutes)
         planned_items = episode_builder.fit(processed_items, target_minutes)
         
-        # Step 4.5: Generate episode script (early so TTS command can use it)
-        click.echo("📝 Generating episode script...")
-        script_path = output_path / "episode_script.txt"
-        with open(script_path, 'w', encoding='utf-8') as f:
-            f.write(f"InboxCast Episode Script - {datetime.now().strftime('%Y-%m-%d')}\n")
-            f.write("=" * 60 + "\n\n")
-            for i, item in enumerate(planned_items, 1):
-                f.write(f"{i}. Title: {item.title}\n")
-                f.write(f"   Words: {item.word_count}\n")
-                f.write(f"   Script: {item.script}\n\n")
+        # Step 4.5: Generate cohesive episode script
+        click.echo("📝 Generating cohesive episode script...")
+        try:
+            episode_engine = EpisodeScriptEngine(
+                model=cfg.processing.openai_model if hasattr(cfg.processing, 'openai_model') else "gpt-4o-mini"
+            )
+            
+            episode_date = datetime.now().strftime('%Y-%m-%d')
+            episode_script = episode_engine.synthesize_episode(
+                planned_items, 
+                target_minutes, 
+                episode_date
+            )
+            
+            # Write enhanced episode script
+            script_path = output_path / "episode_script.txt"
+            with open(script_path, 'w', encoding='utf-8') as f:
+                f.write(f"InboxCast Episode Script - {episode_date}\n")
+                f.write("=" * 60 + "\n\n")
+                f.write(f"Target Duration: {target_minutes} minutes\n")
+                f.write(f"Estimated Duration: {episode_script.estimated_duration_minutes:.1f} minutes\n")
+                f.write(f"Total Words: {episode_script.total_word_count}\n")
+                f.write("=" * 60 + "\n\n")
+                
+                # Write introduction
+                f.write("INTRODUCTION:\n")
+                f.write(f"{episode_script.introduction}\n\n")
+                
+                # Write each segment
+                for i, segment in enumerate(episode_script.segments, 1):
+                    f.write(f"SEGMENT {i}: {segment.theme_title}\n")
+                    f.write(f"Transition: {segment.transition}\n")
+                    f.write(f"Words: {segment.word_count}\n\n")
+                    
+                    for j, item in enumerate(segment.items, 1):
+                        f.write(f"  {i}.{j} {item.title}\n")
+                        f.write(f"      Script: {item.script}\n\n")
+                
+                # Write conclusion
+                f.write("CONCLUSION:\n")
+                f.write(f"{episode_script.conclusion}\n")
+            
+            click.echo(f"✅ Generated cohesive episode ({episode_script.estimated_duration_minutes:.1f} min, {episode_script.total_word_count} words)")
+            
+        except Exception as e:
+            click.echo(f"⚠️  Episode script synthesis failed: {e}")
+            click.echo("Falling back to simple script generation...")
+            
+            # Fallback to simple script generation
+            script_path = output_path / "episode_script.txt"
+            with open(script_path, 'w', encoding='utf-8') as f:
+                f.write(f"InboxCast Episode Script - {datetime.now().strftime('%Y-%m-%d')}\n")
+                f.write("=" * 60 + "\n\n")
+                for i, item in enumerate(planned_items, 1):
+                    f.write(f"{i}. Title: {item.title}\n")
+                    f.write(f"   Words: {item.word_count}\n")
+                    f.write(f"   Script: {item.script}\n\n")
+            
+            # Set episode_script to None so we know to use simple approach for TTS
+            episode_script = None
         
         # Step 5: Generate audio
         click.echo("🗣️  Generating audio...")
@@ -158,12 +209,16 @@ def run(config, output, minutes):
         audio_segments = []
         titles = []
         
-        for item in planned_items:
+        # Generate audio based on whether we have episode script or fallback to simple
+        if 'episode_script' in locals() and episode_script is not None:
+            # Use structured episode script for TTS
+            click.echo(f"🎯 Generating cohesive episode audio ({len(episode_script.segments)} segments)")
+            
+            # Generate introduction audio
             try:
-                # Pass MiniMax-specific parameters if using MiniMax provider
                 if isinstance(tts_provider, MiniMaxProvider):
-                    audio_data = tts_provider.synthesize(
-                        item.script,
+                    intro_audio = tts_provider.synthesize(
+                        episode_script.introduction,
                         voice=cfg.voice_settings.voice_id,
                         wpm=cfg.voice_settings.wpm,
                         speed=cfg.voice_settings.speed,
@@ -171,16 +226,116 @@ def run(config, output, minutes):
                         pitch=cfg.voice_settings.pitch
                     )
                 else:
-                    audio_data = tts_provider.synthesize(
-                        item.script,
+                    intro_audio = tts_provider.synthesize(
+                        episode_script.introduction,
                         voice=cfg.voice_settings.voice_id,
                         wpm=cfg.voice_settings.wpm
                     )
-                if audio_data:
-                    audio_segments.append(audio_data)
-                    titles.append(item.title)
+                if intro_audio:
+                    audio_segments.append(intro_audio)
+                    titles.append("Introduction")
             except Exception as e:
-                click.echo(f"⚠️  TTS failed for {item.title}: {e}")
+                click.echo(f"⚠️  TTS failed for introduction: {e}")
+            
+            # Generate audio for each segment
+            for segment in episode_script.segments:
+                # Generate transition audio
+                if segment.transition.strip():
+                    try:
+                        if isinstance(tts_provider, MiniMaxProvider):
+                            transition_audio = tts_provider.synthesize(
+                                segment.transition,
+                                voice=cfg.voice_settings.voice_id,
+                                wpm=cfg.voice_settings.wpm,
+                                speed=cfg.voice_settings.speed,
+                                vol=cfg.voice_settings.vol,
+                                pitch=cfg.voice_settings.pitch
+                            )
+                        else:
+                            transition_audio = tts_provider.synthesize(
+                                segment.transition,
+                                voice=cfg.voice_settings.voice_id,
+                                wpm=cfg.voice_settings.wpm
+                            )
+                        if transition_audio:
+                            audio_segments.append(transition_audio)
+                            titles.append(f"Transition: {segment.theme_title}")
+                    except Exception as e:
+                        click.echo(f"⚠️  TTS failed for {segment.theme_title} transition: {e}")
+                
+                # Generate audio for each item in segment
+                for item in segment.items:
+                    try:
+                        if isinstance(tts_provider, MiniMaxProvider):
+                            item_audio = tts_provider.synthesize(
+                                item.script,
+                                voice=cfg.voice_settings.voice_id,
+                                wpm=cfg.voice_settings.wpm,
+                                speed=cfg.voice_settings.speed,
+                                vol=cfg.voice_settings.vol,
+                                pitch=cfg.voice_settings.pitch
+                            )
+                        else:
+                            item_audio = tts_provider.synthesize(
+                                item.script,
+                                voice=cfg.voice_settings.voice_id,
+                                wpm=cfg.voice_settings.wpm
+                            )
+                        if item_audio:
+                            audio_segments.append(item_audio)
+                            titles.append(item.title)
+                    except Exception as e:
+                        click.echo(f"⚠️  TTS failed for {item.title}: {e}")
+            
+            # Generate conclusion audio
+            try:
+                if isinstance(tts_provider, MiniMaxProvider):
+                    conclusion_audio = tts_provider.synthesize(
+                        episode_script.conclusion,
+                        voice=cfg.voice_settings.voice_id,
+                        wpm=cfg.voice_settings.wpm,
+                        speed=cfg.voice_settings.speed,
+                        vol=cfg.voice_settings.vol,
+                        pitch=cfg.voice_settings.pitch
+                    )
+                else:
+                    conclusion_audio = tts_provider.synthesize(
+                        episode_script.conclusion,
+                        voice=cfg.voice_settings.voice_id,
+                        wpm=cfg.voice_settings.wpm
+                    )
+                if conclusion_audio:
+                    audio_segments.append(conclusion_audio)
+                    titles.append("Conclusion")
+            except Exception as e:
+                click.echo(f"⚠️  TTS failed for conclusion: {e}")
+        
+        else:
+            # Fallback: Use simple item-by-item approach
+            click.echo(f"🔄 Generating simple episode audio ({len(planned_items)} items)")
+            for item in planned_items:
+                try:
+                    # Pass MiniMax-specific parameters if using MiniMax provider
+                    if isinstance(tts_provider, MiniMaxProvider):
+                        audio_data = tts_provider.synthesize(
+                            item.script,
+                            voice=cfg.voice_settings.voice_id,
+                            wpm=cfg.voice_settings.wpm,
+                            speed=cfg.voice_settings.speed,
+                            vol=cfg.voice_settings.vol,
+                            pitch=cfg.voice_settings.pitch
+                        )
+                    else:
+                        audio_data = tts_provider.synthesize(
+                            item.script,
+                            voice=cfg.voice_settings.voice_id,
+                            wpm=cfg.voice_settings.wpm
+                        )
+                    if audio_data:
+                        audio_segments.append(audio_data)
+                        titles.append(item.title)
+                except Exception as e:
+                    click.echo(f"⚠️  TTS failed for {item.title}: {e}")
         
         if not audio_segments:
             click.echo("❌ No audio generated")
@@ -299,7 +454,8 @@ def plan(config, minutes):
     target_minutes = minutes or cfg.target_duration
     
     # Fetch and process content
-    source = MultiRSSSource(cfg.rss_feeds)
+    source = MultiRSSSource(feed_configs=cfg.rss_feeds, 
+                            max_items_per_feed=cfg.max_rss_items)
     raw_items = source.fetch()
     
     # Use configured deduplicator

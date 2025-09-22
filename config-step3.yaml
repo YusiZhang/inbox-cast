@@ -1,11 +1,12 @@
 # Step 3: Production Audio Pipeline Configuration
 rss_feeds:
-  - url: "https://www.technologyreview.com/feed/"
-    weight: 1.0
+  # - url: "https://www.technologyreview.com/feed/"
+  #   weight: 1.0
   - url: "https://bullrich.dev/tldr-rss/ai.rss"
     weight: 1.0
 
 target_duration: 10  # minutes
+max_rss_items: 10  # Maximum items to fetch per RSS feed (reduces processing time)
 dedupe_threshold: 0.9
 
 # Voice settings with MiniMax support
@@ -14,15 +15,15 @@ voice_settings:
   wpm: 165  # words per minute (comfortable listening speed)
   voice_id: "English_captivating_female1"  # MiniMax voice ID
   # MiniMax-specific settings
-  speed: 1.0    # 0.5-2.0 speed multiplier
+  speed: 0.8    # 0.5-2.0 speed multiplier
   vol: 1.0      # Volume level
   pitch: 0    # Pitch adjustment
 
 # Professional audio processing
 audio:
   use_professional_stitcher: true  # Use ProfessionalAudioStitcher with pydub
-  gap_ms: 500                      # Gap between segments (ms)
-  fade_ms: 50                      # Fade in/out duration (ms)
+  gap_ms: 800                      # Gap between segments (ms)
+  fade_ms: 100                      # Fade in/out duration (ms)
   target_lufs: -19.0               # Target loudness (broadcast standard)
   normalize_audio: true            # Apply audio normalization
 
@@ -38,7 +39,7 @@ output:
 # Processing configuration (from Step 2)
 processing:
   summarizer: "openai"
-  max_words: 50
+  max_words: 70
   openai_model: "gpt-4o-mini"
   openai_temperature: 0.3
   
@@ -50,7 +51,7 @@ processing:
   use_readability: true
   fetch_full_content: true
   content_timeout: 10
-  max_quote_words: 30
+  max_quote_words: 150
 
   # Policy checks configuration - split into pre-LLM and post-LLM phases
   policy_checks:

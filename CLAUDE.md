@@ -26,4 +26,3 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Reference Documents
 - Full PRD: `.claude/prompts/PRD-MVP.md`
-- Implementation order in PRD section 11
