@@ -13,6 +13,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Stack:** Next.js (web) + FastAPI (API) + Supabase (DB/Storage)  
 **Pipeline:** Email forwarding → Parse → Allowlist fetch (Firecrawl) → Dedupe → Summarize (OpenAI) → TTS (MiniMax) → Private RSS
+**AI:** OpenAI (response API)
+**Scheduler:**: TBD
 
 **Legal-First Design:**
 - User-provided content only (no crawling)
