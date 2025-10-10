@@ -75,6 +75,11 @@ def create_app(output_dir: str = "out") -> FastAPI:
                 "Content-Type": "application/rss+xml; charset=utf-8"
             }
         )
+    
+    @app.head("/feed.xml")
+    async def feed_head():
+        # return headers only; FastAPI will omit body for HEAD
+        return Response(headers={"Content-Type": "application/rss+xml"})
 
     @app.get("/episode.json")
     async def get_episode_metadata():
