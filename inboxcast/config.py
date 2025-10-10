@@ -57,6 +57,22 @@ class AudioConfig:
 
 
 @dataclass
+class AzureConfig:
+    """Azure Blob Storage configuration."""
+    connection_string: str = ""
+    container_name: str = "podcast-files"
+    base_url: str = ""  # Custom domain if using CDN
+
+
+@dataclass
+class PublishingConfig:
+    """Publishing configuration for podcast distribution."""
+    azure: AzureConfig
+    rss_base_url: str = "https://podcast.yusizhang.com"
+    enable_upload: bool = False
+
+
+@dataclass
 class OutputConfig:
     audio_format: str = "mp3"  # "wav", "mp3"
     sample_rate: int = 44100
@@ -116,6 +132,7 @@ class Config:
     output: OutputConfig
     processing: ProcessingConfig
     audio: AudioConfig
+    publishing: PublishingConfig
     target_duration: int = 10
     max_rss_items: int = 20  # Maximum items to fetch per RSS feed
     dedupe_threshold: float = 0.9  # Legacy field for backward compatibility
@@ -152,7 +169,19 @@ class Config:
         # Convert audio config (with defaults for backward compatibility)
         audio_data = data.get("audio", {})
         audio = AudioConfig(**audio_data)
-        
+
+        # Convert publishing config (with defaults for backward compatibility)
+        publishing_data = data.get("publishing", {})
+        azure_data = publishing_data.get("azure", {})
+
+        # Check for Azure connection string in environment if not in config
+        if not azure_data.get("connection_string"):
+            azure_data["connection_string"] = os.getenv("AZURE_STORAGE_CONNECTION_STRING", "")
+
+        azure = AzureConfig(**azure_data)
+        publishing_data["azure"] = azure
+        publishing = PublishingConfig(**publishing_data)
+
         return cls(
             rss_feeds=feeds,
             target_duration=data["target_duration"],
@@ -161,5 +190,6 @@ class Config:
             voice_settings=voice,
             output=output,
             processing=processing,
-            audio=audio
+            audio=audio,
+            publishing=publishing
         )

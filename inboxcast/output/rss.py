@@ -12,11 +12,13 @@ class RSSGenerator:
         self.base_url = base_url
     
     def generate_feed(
-        self, 
+        self,
         episode_filename: str,
         items: List,
         title: str = "InboxCast",
-        description: str = "AI-generated newsletter summaries"
+        description: str = "AI-generated newsletter summaries",
+        episode_url: str = None,
+        file_size: int = None
     ) -> str:
         """Generate RSS feed XML."""
         
@@ -29,8 +31,9 @@ class RSSGenerator:
         duration_seconds = int(duration_minutes * 60)
         duration_formatted = f"{duration_seconds // 60:02d}:{duration_seconds % 60:02d}"
         
-        # Episode URL
-        episode_url = f"{self.base_url}/{episode_filename}"
+        # Episode URL - use provided URL or construct from base_url
+        if episode_url is None:
+            episode_url = f"{self.base_url}/{episode_filename}"
         
         rss_xml = f'''<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
@@ -58,7 +61,7 @@ class RSSGenerator:
             </description>
             <pubDate>{pub_date}</pubDate>
             <guid>{episode_url}</guid>
-            <enclosure url="{episode_url}" type="audio/mpeg" length="0"/>
+            <enclosure url="{episode_url}" type="audio/mpeg" length="{file_size or 0}"/>
             <itunes:duration>{duration_formatted}</itunes:duration>
             <itunes:summary>AI-generated summaries from tech newsletters</itunes:summary>
         </item>
@@ -108,23 +111,33 @@ class RSSGenerator:
         
         return metadata
     
-    def write_files(self, output_dir: str, episode_filename: str, items: List):
+    def write_files(self, output_dir: str, episode_filename: str, items: List,
+                   episode_url: str = None, file_size: int = None):
         """Write RSS feed and metadata files."""
-        
+
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
-        
+
         # Generate and write RSS feed
-        rss_content = self.generate_feed(episode_filename, items)
+        rss_content = self.generate_feed(
+            episode_filename, items,
+            episode_url=episode_url,
+            file_size=file_size
+        )
         rss_path = output_path / "feed.xml"
         with open(rss_path, 'w', encoding='utf-8') as f:
             f.write(rss_content)
-        
+
         # Generate and write metadata
         metadata = self.generate_episode_metadata(items)
+        if episode_url:
+            metadata["episode_url"] = episode_url
+        if file_size:
+            metadata["file_size_bytes"] = file_size
+
         metadata_path = output_path / "episode.json"
         with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(metadata, f, indent=2)
-        
+
         print(f"Generated RSS feed: {rss_path}")
         print(f"Generated metadata: {metadata_path}")
