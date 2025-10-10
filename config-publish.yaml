@@ -14,7 +14,7 @@ voice_settings:
   wpm: 165  # words per minute
   voice_id: "English_captivating_female1"  # MiniMax voice ID
   # MiniMax-specific settings
-  speed: 0.8    # 0.5-2.0 speed multiplier
+  speed: 0.9    # 0.5-2.0 speed multiplier
   vol: 1.0      # Volume level
   pitch: 0    # Pitch adjustment
 
