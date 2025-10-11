@@ -56,6 +56,41 @@ inboxcast upload --config config-publish.yaml --output-dir out/
 inboxcast serve --output-dir out/ --port 8000
 ```
 
+### Running FastAPI Server as Background Service (VPS Deployment)
+
+For production deployment on a VPS, use systemd to run the FastAPI server as a persistent background service:
+
+```bash
+# Copy the service file to systemd directory
+sudo cp inboxcast.service /etc/systemd/system/
+
+# Reload systemd to recognize the new service
+sudo systemctl daemon-reload
+
+# Enable the service to start on boot
+sudo systemctl enable inboxcast
+
+# Start the service now
+sudo systemctl start inboxcast
+
+# Check the status
+sudo systemctl status inboxcast
+```
+
+**Service Management Commands:**
+```bash
+# Stop the server
+sudo systemctl stop inboxcast
+
+# Restart the server
+sudo systemctl restart inboxcast
+
+# View logs
+sudo journalctl -u inboxcast -f
+```
+
+The service configuration file (`inboxcast.service`) is included in the repository and will automatically restart the server if it crashes.
+
 ### Validation and Testing
 
 ```bash
