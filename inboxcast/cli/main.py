@@ -342,8 +342,15 @@ def _run_pipeline(cfg: Config, output_path: Path, target_minutes: int):
 
     combined_audio = stitcher.stitch(audio_segments, titles)
 
+    # Generate date-based episode filename
+    episode_date = datetime.now().strftime('%Y-%m-%d')
+    base_filename = cfg.output.episode_filename
+    name_part = Path(base_filename).stem
+    extension = Path(base_filename).suffix or '.mp3'
+    date_based_filename = f"{name_part}-{episode_date}{extension}"
+
     # Export audio in configured format
-    episode_path = output_path / cfg.output.episode_filename
+    episode_path = output_path / date_based_filename
 
     if cfg.output.audio_format.lower() == "mp3" and hasattr(stitcher, 'export_mp3'):
         try:
@@ -358,12 +365,16 @@ def _run_pipeline(cfg: Config, output_path: Path, target_minutes: int):
             episode_path = episode_path.with_suffix('.wav')
         stitcher.export_wav(combined_audio, str(episode_path))
 
-    # Step 7: Generate RSS feed
+    # Step 7: Generate RSS feed with episode history
     click.echo("📻 Generating RSS feed...")
     rss_generator = RSSGenerator()
-    rss_generator.write_files(str(output_path), cfg.output.episode_filename, planned_items)
 
-    return episode_path, planned_items, script_path
+    # First, write current episode metadata
+    rss_generator.write_files(str(output_path), date_based_filename, planned_items, use_history=False)
+
+    # Note: We'll add to history after upload when we have the URL
+
+    return episode_path, planned_items, script_path, episode_date, date_based_filename
 
 
 @click.group()
@@ -391,10 +402,31 @@ def run(config, output, minutes):
         output_path.mkdir(parents=True, exist_ok=True)
 
         # Run the complete pipeline
-        episode_path, planned_items, script_path = _run_pipeline(cfg, output_path, target_minutes)
+        episode_path, planned_items, script_path, episode_date, date_based_filename = _run_pipeline(cfg, output_path, target_minutes)
 
         if episode_path is None:
             return  # Pipeline failed, error already logged
+
+        # Add episode to history and regenerate multi-episode RSS feed
+        click.echo("📚 Adding episode to history and updating RSS feed...")
+        rss_generator = RSSGenerator()
+
+        # For local mode, add episode to history with local URL
+        local_episode_url = f"http://localhost:8000/{date_based_filename}"
+        episode_size = episode_path.stat().st_size if episode_path.exists() else 0
+
+        # Add to history
+        rss_generator.add_episode_to_history(
+            str(output_path),
+            date_based_filename,
+            planned_items,
+            local_episode_url,
+            episode_size,
+            episode_date
+        )
+
+        # Regenerate RSS feed with all episodes
+        rss_generator.write_files(str(output_path), use_history=True)
 
         # Summary
         total_items = len(planned_items)
@@ -540,7 +572,7 @@ def publish(config, output, minutes):
         output_path.mkdir(parents=True, exist_ok=True)
 
         # Run the complete pipeline to generate all files
-        episode_path, planned_items, script_path = _run_pipeline(cfg, output_path, target_minutes)
+        episode_path, planned_items, script_path, episode_date, date_based_filename = _run_pipeline(cfg, output_path, target_minutes)
 
         if episode_path is None:
             return  # Pipeline failed, error already logged
@@ -567,19 +599,25 @@ def publish(config, output, minutes):
         click.echo(f"✅ Uploaded episode: {episode_url}")
 
         # Get file size for RSS
-        blob_name = f"{datetime.now().strftime('%Y-%m-%d')}/{episode_path.name}"
+        blob_name = f"{episode_date}/{episode_path.name}"
         file_size = uploader.get_file_size(blob_name)
 
-        # Generate RSS with Azure URLs
-        click.echo("📻 Updating RSS feed with Azure URLs...")
+        # Add episode to history and generate multi-episode RSS with Azure URLs
+        click.echo("📻 Adding to history and updating RSS feed with Azure URLs...")
         rss_generator = RSSGenerator(base_url=cfg.publishing.rss_base_url)
-        rss_generator.write_files(
+
+        # Add episode to history with Azure URL
+        rss_generator.add_episode_to_history(
             str(output_path),
-            cfg.output.episode_filename,
+            date_based_filename,
             planned_items,
-            episode_url=episode_url,
-            file_size=file_size
+            episode_url,
+            file_size,
+            episode_date
         )
+
+        # Generate multi-episode RSS feed
+        rss_generator.write_files(str(output_path), use_history=True)
 
         # Summary
         total_items = len(planned_items)
