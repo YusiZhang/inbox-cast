@@ -11,7 +11,7 @@ from ..summarize.openai_engine import OpenAISummarizer
 from ..tts.espeak import EspeakProvider, DummyTTSProvider
 from ..tts.minimax import MiniMaxProvider
 from ..audio.stitch import SimpleAudioStitcher, ProfessionalAudioStitcher, SimpleEpisodeBuilder
-from ..output.rss import RSSGenerator
+from ..publish.rss import RSSGenerator
 from ..utils.script_parser import ScriptParser
 from ..script.episode_engine import EpisodeScriptEngine
 from ..cloud.azure import AzureBlobUploader
