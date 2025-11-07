@@ -20,7 +20,7 @@ class EpisodeScriptEngine:
         api_key: Optional[str] = None,
         model: str = "gpt-4o-mini",
         temperature: float = 0.7,  # Higher creativity for episode flow
-        max_intro_words: int = 100,
+        max_intro_words: int = 65,
         max_outro_words: int = 80,
         max_transition_words: int = 30
     ):
@@ -206,7 +206,7 @@ class EpisodeScriptEngine:
         try:
             response = self.client.responses.create(
                 model=self.model,
-                instructions=f"Generate a {self.max_intro_words}-word engaging podcast introduction that sounds natural and conversational.",
+                instructions=f"Generate a {self.max_intro_words}-word professional, concise podcast introduction. Be direct and informative. Avoid marketing language, enthusiasm, or filler phrases.",
                 input=intro_prompt,
                 temperature=self.temperature,
                 max_output_tokens=150,
@@ -403,7 +403,7 @@ Return the grouping as JSON with segment themes and corresponding item IDs."""
         topics = [seg.theme_title for seg in segments]
         date_text = f" for {episode_date}" if episode_date else ""
         
-        return f"""Create an engaging podcast introduction{date_text} for an AI newsletter summary episode.
+        return f"""Create a professional, concise podcast introduction{date_text} for an AI newsletter summary episode.
 
 Episode details:
 - Target duration: {target_minutes} minutes
@@ -411,13 +411,14 @@ Episode details:
 - Number of segments: {len(segments)}
 
 The introduction should:
-- Be conversational and engaging
-- Set expectations for the episode content
+- Be direct and informative (NPR-style)
+- Briefly state what topics will be covered
 - Sound natural when spoken aloud
 - Be exactly {self.max_intro_words} words or less
 - Welcome listeners to "InboxCast"
+- Avoid enthusiasm, marketing language, or filler phrases (no "thrilled", "grab a beverage", "settle in", etc.)
 
-Create a warm, professional introduction that gets listeners excited about the content."""
+Create a professional, matter-of-fact introduction that gets straight to the content."""
     
     def _build_conclusion_prompt(self, segments: List[EpisodeSegment], target_minutes: int) -> str:
         """Build prompt for episode conclusion generation."""

@@ -30,3 +30,5 @@ To disable this warning, you can either:
 
 - [ ] each generated audio segment should be saved to /out
 - [ ] implement more sophisticated paywall detection logic
+- [x] opening and closing summary sounds too much like a word salad. It does not give a good enough summary info
+- [ ] should find another way to download html
